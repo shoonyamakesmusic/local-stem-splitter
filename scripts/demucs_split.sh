@@ -1,26 +1,21 @@
 #!/usr/bin/env bash
-# Split a reference track into stems using Demucs (htdemucs_ft) and the drums
-# stem into kick/snare/hihat/toms/cymbals using Drumsep.
+# Split a reference track:
+#   1. Demucs htdemucs_ft        -> stems/{drums,bass,vocals,other}.wav
+#   2. LarsNet                   -> drums_split/{kick,snare,toms,hihat,cymbals}.wav
+#   3. keyfinder-cli + aubio     -> analysis.txt (key, BPM)
 #
 # Usage:
 #   ./demucs_split.sh <input.wav|.mp3|.flac|.m4a> [output_dir]
-#
-# Default output_dir: <input_dir>/  (writes ./stems and ./drums_split next to input)
-#
-# Examples:
-#   ./demucs_split.sh "Songs/track.wav"
-#   ./demucs_split.sh "Songs/track.wav" "_GENRE_TEMPLATE/01_References/Track_01"
 
 set -euo pipefail
 
 VENV_BIN="$HOME/.venvs/demucs/bin"
 DEMUCS="$VENV_BIN/demucs"
-DRUMSEP_MODEL_DIR="$HOME/.cache/drumsep/model"
-DRUMSEP_SIG="49469ca8"
+PYTHON="$VENV_BIN/python"
+LARSNET_DIR="$HOME/.cache/larsnet"
 
 if [[ ! -x "$DEMUCS" ]]; then
-  echo "ERROR: demucs not found at $DEMUCS"
-  echo "Install with: python3.11 -m venv ~/.venvs/demucs && ~/.venvs/demucs/bin/pip install demucs"
+  echo "ERROR: demucs not found at $DEMUCS — run install.sh first."
   exit 1
 fi
 
@@ -37,6 +32,7 @@ TRACK_NAME="$(basename "${INPUT%.*}")"
 
 mkdir -p "$STEMS_DIR" "$DRUMS_DIR"
 
+# 1. Demucs ----------------------------------------------------
 echo "==> Splitting stems with Demucs (htdemucs_ft) on: $INPUT"
 "$DEMUCS" -n htdemucs_ft -o "$STEMS_DIR/_raw" "$INPUT"
 
@@ -45,31 +41,36 @@ if [[ ! -d "$SRC" ]]; then
   echo "ERROR: expected demucs output at $SRC not found"
   exit 1
 fi
-
 mv "$SRC"/*.wav "$STEMS_DIR/"
 rm -rf "$STEMS_DIR/_raw"
 echo "    Stems: $STEMS_DIR/{drums,bass,vocals,other}.wav"
 
-if [[ -f "$DRUMSEP_MODEL_DIR/$DRUMSEP_SIG.th" ]]; then
-  echo "==> Splitting drum stem with DrumSep (inagoy/drumsep model)..."
-  "$DEMUCS" --repo "$DRUMSEP_MODEL_DIR" -n "$DRUMSEP_SIG" -o "$DRUMS_DIR/_raw" "$STEMS_DIR/drums.wav"
-  DRUMSEP_SRC="$DRUMS_DIR/_raw/$DRUMSEP_SIG/drums"
-  if [[ -d "$DRUMSEP_SRC" ]]; then
-    mv "$DRUMSEP_SRC"/*.wav "$DRUMS_DIR/"
-    rm -rf "$DRUMS_DIR/_raw"
-    # Rename Spanish -> English (bombo=kick, redoblante=snare, platillos=cymbals)
-    [[ -f "$DRUMS_DIR/bombo.wav" ]] && mv "$DRUMS_DIR/bombo.wav" "$DRUMS_DIR/kick.wav"
-    [[ -f "$DRUMS_DIR/redoblante.wav" ]] && mv "$DRUMS_DIR/redoblante.wav" "$DRUMS_DIR/snare.wav"
-    [[ -f "$DRUMS_DIR/platillos.wav" ]] && mv "$DRUMS_DIR/platillos.wav" "$DRUMS_DIR/cymbals.wav"
-    echo "    Drum elements: $DRUMS_DIR/"
-    ls "$DRUMS_DIR"/*.wav 2>/dev/null | sed 's/^/      /'
-  else
-    echo "    WARN: expected drumsep output at $DRUMSEP_SRC not found"
-  fi
+# 2. LarsNet ---------------------------------------------------
+if [[ -f "$LARSNET_DIR/separate.py" && -f "$LARSNET_DIR/pretrained_larsnet_models/kick/pretrained_kick_unet.pth" ]]; then
+  echo "==> Splitting drums with LarsNet..."
+  # LarsNet rglobs a directory for .wav files — give it an isolated input dir.
+  STAGING_IN="$DRUMS_DIR/_in"
+  STAGING_OUT="$DRUMS_DIR/_raw"
+  mkdir -p "$STAGING_IN"
+  cp "$STEMS_DIR/drums.wav" "$STAGING_IN/drums.wav"
+  (
+    cd "$LARSNET_DIR"
+    "$PYTHON" separate.py -i "$STAGING_IN" -o "$STAGING_OUT" -d cpu
+  )
+  # LarsNet writes <out>/<stem>/drums.wav — flatten to <drums_split>/<stem>.wav.
+  for stem in kick snare toms hihat cymbals; do
+    if [[ -f "$STAGING_OUT/$stem/drums.wav" ]]; then
+      mv "$STAGING_OUT/$stem/drums.wav" "$DRUMS_DIR/$stem.wav"
+    fi
+  done
+  rm -rf "$STAGING_IN" "$STAGING_OUT"
+  echo "    Drum elements: $DRUMS_DIR/"
+  ls "$DRUMS_DIR"/*.wav 2>/dev/null | sed 's/^/      /'
 else
-  echo "==> DrumSep model not found at $DRUMSEP_MODEL_DIR/$DRUMSEP_SIG.th — skipping drum-element split."
+  echo "==> LarsNet not installed at $LARSNET_DIR — skipping drum-element split."
 fi
 
+# 3. Analysis --------------------------------------------------
 if command -v keyfinder-cli >/dev/null 2>&1 && command -v aubio >/dev/null 2>&1; then
   echo "==> Analyzing key and BPM..."
   "$(dirname "$0")/analyze.sh" "$INPUT" | tee "$OUT_DIR/analysis.txt"

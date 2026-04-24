@@ -8,9 +8,8 @@ set -euo pipefail
 
 VENV="$HOME/.venvs/demucs"
 VENV_BIN="$VENV/bin"
-DRUMSEP_DIR="$HOME/.cache/drumsep/model"
-DRUMSEP_MODEL="$DRUMSEP_DIR/49469ca8.th"
-DRUMSEP_GDRIVE_ID="1-Dm666ScPkg8Gt2-lK3Ua0xOudWHZBGC"
+LARSNET_DIR="$HOME/.cache/larsnet"
+LARSNET_GDRIVE_ID="1U8-5924B1ii1cjv9p0MTPzayb00P4qoL"
 KEYFINDER_CLI_REPO="https://github.com/EvanPurkhiser/keyfinder-cli.git"
 
 note()  { printf "    \033[2m%s\033[0m\n" "$*"; }
@@ -45,43 +44,37 @@ done
 ok "brew packages ready"
 
 # 3. Python venv
-step "Python venv (demucs, torchcodec, gdown)"
+step "Python venv (demucs, torchcodec, soundfile, gdown)"
 if [[ ! -x "$VENV_BIN/demucs" ]]; then
   python3.11 -m venv "$VENV"
   "$VENV_BIN/pip" install --upgrade pip >/dev/null
-  "$VENV_BIN/pip" install demucs torchcodec gdown
+  "$VENV_BIN/pip" install demucs torchcodec soundfile gdown
   ok "venv created at $VENV"
 else
   note "[already] $VENV"
   "$VENV_BIN/python" -c "import torchcodec" 2>/dev/null || "$VENV_BIN/pip" install torchcodec
+  "$VENV_BIN/python" -c "import soundfile" 2>/dev/null || "$VENV_BIN/pip" install soundfile
   "$VENV_BIN/python" -c "import gdown"      2>/dev/null || "$VENV_BIN/pip" install gdown
   ok "venv OK"
 fi
 
-# 4. Patch demucs states.py for PyTorch 2.6+ weights_only=True default.
-# The DrumSep checkpoint is an older pickle format and needs weights_only=False.
-step "Patch demucs states.py (weights_only=False)"
-STATES_PY="$VENV/lib/python3.11/site-packages/demucs/states.py"
-if [[ ! -f "$STATES_PY" ]]; then
-  warn "states.py not found at $STATES_PY (skipping)"
-elif grep -q "weights_only=False" "$STATES_PY"; then
-  note "[already] patched"
+# 4. LarsNet (repo + 540 MB pretrained weights)
+step "LarsNet (drum-element separation)"
+if [[ -f "$LARSNET_DIR/pretrained_larsnet_models/kick/pretrained_kick_unet.pth" ]]; then
+  note "[already] $LARSNET_DIR"
 else
-  sed -i '' "s/torch\.load(path, 'cpu')/torch.load(path, 'cpu', weights_only=False)/" "$STATES_PY"
-  ok "patched"
+  rm -rf "$LARSNET_DIR"
+  git clone --depth 1 https://github.com/polimi-ispl/larsnet.git "$LARSNET_DIR" >/dev/null 2>&1
+  (
+    cd "$LARSNET_DIR"
+    "$VENV_BIN/gdown" "$LARSNET_GDRIVE_ID" -O weights.zip
+    unzip -q weights.zip
+    rm weights.zip
+  )
+  ok "LarsNet installed at $LARSNET_DIR"
 fi
 
-# 5. DrumSep model (from inagoy/drumsep, hosted on Google Drive)
-step "DrumSep model (~167 MB)"
-if [[ -f "$DRUMSEP_MODEL" ]]; then
-  note "[already] $DRUMSEP_MODEL"
-else
-  mkdir -p "$DRUMSEP_DIR"
-  "$VENV_BIN/gdown" -O "$DRUMSEP_MODEL" "$DRUMSEP_GDRIVE_ID"
-  ok "downloaded"
-fi
-
-# 6. keyfinder-cli from source (not available as a brew formula)
+# 5. keyfinder-cli from source (not available as a brew formula)
 step "keyfinder-cli (build from source)"
 if command -v keyfinder-cli >/dev/null 2>&1; then
   note "[already] $(command -v keyfinder-cli)"
@@ -101,13 +94,13 @@ else
   ok "built and installed"
 fi
 
-# 7. Smoke tests
+# 6. Smoke tests
 step "Smoke tests"
-"$VENV_BIN/demucs" --help >/dev/null 2>&1 && ok "demucs"           || warn "demucs broken"
-command -v aubio          >/dev/null       && ok "aubio"            || warn "aubio missing"
-command -v keyfinder-cli  >/dev/null       && ok "keyfinder-cli"    || warn "keyfinder-cli missing"
-command -v ffmpeg         >/dev/null       && ok "ffmpeg"           || warn "ffmpeg missing"
-[[ -f "$DRUMSEP_MODEL" ]]                  && ok "drumsep model"    || warn "drumsep model missing"
+"$VENV_BIN/demucs" --help >/dev/null 2>&1 && ok "demucs"          || warn "demucs broken"
+[[ -f "$LARSNET_DIR/separate.py" ]]        && ok "larsnet"         || warn "larsnet missing"
+command -v aubio         >/dev/null        && ok "aubio"           || warn "aubio missing"
+command -v keyfinder-cli >/dev/null        && ok "keyfinder-cli"   || warn "keyfinder-cli missing"
+command -v ffmpeg        >/dev/null        && ok "ffmpeg"          || warn "ffmpeg missing"
 
 echo ""
 step "Install complete."

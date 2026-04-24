@@ -75,6 +75,7 @@ STEM_ORDER = [
     ("kick",    "drums_split/kick.wav"),
     ("snare",   "drums_split/snare.wav"),
     ("toms",    "drums_split/toms.wav"),
+    ("hihat",   "drums_split/hihat.wav"),
     ("cymbals", "drums_split/cymbals.wav"),
 ]
 
