@@ -50,10 +50,10 @@ That's it. You only do this once. The tool overwrites the template's tempo, key,
 
 Supported inputs: `.wav`, `.mp3`, `.m4a`, `.flac`.
 
-Output (by default, in your current directory):
+Output (by default, alongside the input file):
 
 ```
-<songname>_Splits/
+<input's folder>/
 ├── stems/
 │   ├── drums.wav
 │   ├── bass.wav
@@ -71,6 +71,24 @@ Output (by default, in your current directory):
 ```
 
 Open the `.als` in Ableton Live 12 — you'll see 9 audio tracks named after the stems, aligned at bar 1, with tempo and key set from the analysis.
+
+### Recommended layout
+
+One folder per reference track keeps everything tidy:
+
+```
+References/
+├── song_a/
+│   ├── song_a.m4a
+│   ├── stems/
+│   ├── drums_split/
+│   ├── analysis.txt
+│   └── Ableton Project/
+└── song_b/
+    └── ...
+```
+
+Put the audio file inside its own folder, then run `split.sh` on it — outputs land in that same folder.
 
 ### Custom output folder
 

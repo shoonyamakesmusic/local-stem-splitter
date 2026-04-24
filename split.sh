@@ -5,7 +5,8 @@
 # Usage:
 #   ./split.sh <audio_file> [output_folder]
 #
-# Output (default): ./<basename>_Splits/
+# Output (default): the input file's parent directory (so stems land alongside
+# the source). Pass a second arg to override.
 #
 # Environment variables:
 #   TEMPLATE_ALS  override path to Ableton template (default: ./template/Empty.als)
@@ -20,7 +21,8 @@ if [[ $# -lt 1 ]]; then
   cat <<EOF
 Usage: $0 <audio_file> [output_folder]
 
-Outputs to ./<basename>_Splits/ by default:
+Output goes into the input file's parent directory by default
+(pass an explicit output folder to override):
   stems/{drums,bass,vocals,other}.wav         (Demucs htdemucs_ft)
   drums_split/{kick,snare,toms,cymbals}.wav   (DrumSep)
   analysis.txt                                 (key + BPM)
@@ -42,7 +44,8 @@ REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 SCRIPTS_DIR="$REPO_DIR/scripts"
 
 BASE_NAME="$(basename "${INPUT%.*}")"
-OUT_DIR="${2:-$PWD/${BASE_NAME}_Splits}"
+INPUT_ABS="$(cd "$(dirname "$INPUT")" && pwd)/$(basename "$INPUT")"
+OUT_DIR="${2:-$(dirname "$INPUT_ABS")}"
 
 TEMPLATE_ALS="${TEMPLATE_ALS:-$REPO_DIR/template/Empty.als}"
 if [[ ! -f "$TEMPLATE_ALS" ]]; then
