@@ -1,0 +1,19 @@
+# User-provided Ableton template (varies per Live version)
+template/*.als
+template/Backup/
+template/Ableton Project Info/
+
+# Processed output folders
+*_Splits/
+
+# OS
+.DS_Store
+Icon?
+
+# Editor
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
