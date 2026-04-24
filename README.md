@@ -3,9 +3,9 @@
 Drop in an audio file, get back:
 
 - 4 stems (drums, bass, vocals, other) via Demucs
-- 5 drum elements (kick, snare, toms, hihat, cymbals) via LarsNet
+- 6 drum elements (kick, snare, toms, hihat, ride, crash) via MDX23C
 - Key and BPM analysis
-- An Ableton Live 12 project with all 9 tracks imported, named, aligned, tempo and key set — ready to open
+- An Ableton Live 12 project with all 10 tracks imported, named, aligned, tempo and key set — ready to open
 
 All runs locally on your Mac. No uploads, no subscriptions.
 
@@ -64,13 +64,14 @@ Output (by default, alongside the input file):
 │   ├── snare.wav
 │   ├── toms.wav
 │   ├── hihat.wav
-│   └── cymbals.wav
+│   ├── ride.wav
+│   └── crash.wav
 ├── analysis.txt
 └── Ableton Project/
     └── <songname>.als
 ```
 
-Open the `.als` in Ableton Live 12 — you'll see 9 audio tracks named after the stems, aligned at bar 1, with tempo and key set from the analysis.
+Open the `.als` in Ableton Live 12 — you'll see 10 audio tracks named after the stems, aligned at bar 1, with tempo and key set from the analysis.
 
 ### Recommended layout
 
@@ -104,19 +105,21 @@ TEMPLATE_ALS=/path/to/custom.als ./split.sh path/to/song.m4a
 
 ## What each step does, roughly
 
-| Step | Tool | Time (M-series) |
+| Step | Tool | Time (M-series, MPS) |
 |---|---|---|
-| Stem split | Demucs `htdemucs_ft` (bag-of-4) | ~3–5 min for a 3 min song |
-| Drum split | LarsNet (5-stem U-Net) | ~10–20 s for the drum stem |
+| Stem split | Demucs `htdemucs` (single model, MPS) | ~20–30 s for a 3 min song |
+| Drum split | MDX23C DrumSep (aufr33-jarredou) via audio-separator | ~1 min for the drum stem |
 | Key detection | keyfinder-cli | ~2 s |
 | BPM detection | aubio | ~2 s |
 | Ableton project | Python XML generator | <1 s |
+
+Total: ~2 min per track on Apple Silicon. Pass `--high-quality` to swap in `htdemucs_ft` (bag-of-4, ~4× slower, ~0.6 dB better drums SDR).
 
 ## Caveats
 
 - **BPM accuracy.** aubio sometimes reports 2x or 0.5x the true tempo on breakbeat/halftime material. The tool surfaces a warning after every run. Ear-check and correct in Live if needed.
 - **Key accuracy.** keyfinder-cli is ~85% accurate and can confuse relative major/minor pairs (same notes, different tonal center). Verify by ear for tracks you seriously work with.
-- **Drum split grouping.** LarsNet splits into 5 buses: `kick / snare / toms / hihat / cymbals`. Hihat is its own bus; crashes and rides live together in `cymbals`.
+- **Drum split grouping.** MDX23C splits into 6 buses: `kick / snare / toms / hihat / ride / crash`. All cymbal families are separated individually.
 - **Ableton version.** Generator targets Live 12 schema. Live 11 projects may open but mis-display metadata. Live 13+ is untested.
 - **Gatekeeper prompt.** `keyfinder-cli` is built from source and not notarized; macOS may warn on first run. One-time "Allow" in **System Settings → Privacy & Security**.
 
@@ -125,7 +128,8 @@ TEMPLATE_ALS=/path/to/custom.als ./split.sh path/to/song.m4a
 Built on the work of:
 
 - [Demucs](https://github.com/facebookresearch/demucs) — Meta Research
-- [LarsNet](https://github.com/polimi-ispl/larsnet) — Polimi ISPL (drum-element separation)
+- [MDX23C-DrumSep](https://huggingface.co/spaces/ray-006/DrumSep) — aufr33 & jarredou (drum-element separation)
+- [python-audio-separator](https://github.com/nomadkaraoke/python-audio-separator) — Nomad Karaoke (MDX23C inference wrapper)
 - [keyfinder-cli](https://github.com/EvanPurkhiser/keyfinder-cli) — Evan Purkhiser
 - [aubio](https://aubio.org) — Paul Brossier et al.
 

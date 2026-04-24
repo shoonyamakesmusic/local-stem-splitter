@@ -76,7 +76,8 @@ STEM_ORDER = [
     ("snare",   "drums_split/snare.wav"),
     ("toms",    "drums_split/toms.wav"),
     ("hihat",   "drums_split/hihat.wav"),
-    ("cymbals", "drums_split/cymbals.wav"),
+    ("ride",    "drums_split/ride.wav"),
+    ("crash",   "drums_split/crash.wav"),
 ]
 
 # Attributes that contain ID references we may need to remap.

@@ -8,8 +8,6 @@ set -euo pipefail
 
 VENV="$HOME/.venvs/demucs"
 VENV_BIN="$VENV/bin"
-LARSNET_DIR="$HOME/.cache/larsnet"
-LARSNET_GDRIVE_ID="1U8-5924B1ii1cjv9p0MTPzayb00P4qoL"
 KEYFINDER_CLI_REPO="https://github.com/EvanPurkhiser/keyfinder-cli.git"
 
 note()  { printf "    \033[2m%s\033[0m\n" "$*"; }
@@ -43,38 +41,21 @@ for pkg in "${BREW_PKGS[@]}"; do
 done
 ok "brew packages ready"
 
-# 3. Python venv
-step "Python venv (demucs, torchcodec, soundfile, gdown)"
+# 3. Python venv (demucs + audio-separator for MDX23C drum split)
+step "Python venv (demucs, torchcodec, audio-separator)"
 if [[ ! -x "$VENV_BIN/demucs" ]]; then
   python3.11 -m venv "$VENV"
   "$VENV_BIN/pip" install --upgrade pip >/dev/null
-  "$VENV_BIN/pip" install demucs torchcodec soundfile gdown
+  "$VENV_BIN/pip" install demucs torchcodec "audio-separator[cpu]"
   ok "venv created at $VENV"
 else
   note "[already] $VENV"
-  "$VENV_BIN/python" -c "import torchcodec" 2>/dev/null || "$VENV_BIN/pip" install torchcodec
-  "$VENV_BIN/python" -c "import soundfile" 2>/dev/null || "$VENV_BIN/pip" install soundfile
-  "$VENV_BIN/python" -c "import gdown"      2>/dev/null || "$VENV_BIN/pip" install gdown
+  "$VENV_BIN/python" -c "import torchcodec"                        2>/dev/null || "$VENV_BIN/pip" install torchcodec
+  "$VENV_BIN/python" -c "from audio_separator.separator import Separator" 2>/dev/null || "$VENV_BIN/pip" install "audio-separator[cpu]"
   ok "venv OK"
 fi
 
-# 4. LarsNet (repo + 540 MB pretrained weights)
-step "LarsNet (drum-element separation)"
-if [[ -f "$LARSNET_DIR/pretrained_larsnet_models/kick/pretrained_kick_unet.pth" ]]; then
-  note "[already] $LARSNET_DIR"
-else
-  rm -rf "$LARSNET_DIR"
-  git clone --depth 1 https://github.com/polimi-ispl/larsnet.git "$LARSNET_DIR" >/dev/null 2>&1
-  (
-    cd "$LARSNET_DIR"
-    "$VENV_BIN/gdown" "$LARSNET_GDRIVE_ID" -O weights.zip
-    unzip -q weights.zip
-    rm weights.zip
-  )
-  ok "LarsNet installed at $LARSNET_DIR"
-fi
-
-# 5. keyfinder-cli from source (not available as a brew formula)
+# 4. keyfinder-cli from source (not available as a brew formula)
 step "keyfinder-cli (build from source)"
 if command -v keyfinder-cli >/dev/null 2>&1; then
   note "[already] $(command -v keyfinder-cli)"
@@ -94,13 +75,13 @@ else
   ok "built and installed"
 fi
 
-# 6. Smoke tests
+# 5. Smoke tests
 step "Smoke tests"
-"$VENV_BIN/demucs" --help >/dev/null 2>&1 && ok "demucs"          || warn "demucs broken"
-[[ -f "$LARSNET_DIR/separate.py" ]]        && ok "larsnet"         || warn "larsnet missing"
-command -v aubio         >/dev/null        && ok "aubio"           || warn "aubio missing"
-command -v keyfinder-cli >/dev/null        && ok "keyfinder-cli"   || warn "keyfinder-cli missing"
-command -v ffmpeg        >/dev/null        && ok "ffmpeg"          || warn "ffmpeg missing"
+"$VENV_BIN/demucs" --help >/dev/null 2>&1                                          && ok "demucs"          || warn "demucs broken"
+"$VENV_BIN/python" -c "from audio_separator.separator import Separator" 2>/dev/null && ok "audio-separator" || warn "audio-separator missing"
+command -v aubio         >/dev/null                                                 && ok "aubio"           || warn "aubio missing"
+command -v keyfinder-cli >/dev/null                                                 && ok "keyfinder-cli"   || warn "keyfinder-cli missing"
+command -v ffmpeg        >/dev/null                                                 && ok "ffmpeg"          || warn "ffmpeg missing"
 
 echo ""
 step "Install complete."
@@ -116,4 +97,7 @@ Then to process a song:
   ./split.sh path/to/yourtrack.m4a
 
 See README.md for details.
+
+Note: the MDX23C drum-element model (~500 MB) will auto-download from
+Hugging Face on the first run.
 EOF

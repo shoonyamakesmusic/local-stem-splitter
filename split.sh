@@ -1,15 +1,21 @@
 #!/usr/bin/env bash
 # Full pipeline: audio file -> stems + drum-element splits + key/BPM analysis
-# + Ableton Live project with all 8 stems imported, tempo + key set.
+# + Ableton Live project with all stems imported, tempo + key set.
 #
 # Usage:
-#   ./split.sh <audio_file> [output_folder]
+#   ./split.sh [--high-quality] <audio_file> [output_folder]
 #
 # Output (default): the input file's parent directory (so stems land alongside
 # the source). Pass a second arg to override.
 #
+# Flags:
+#   --high-quality   Use Demucs htdemucs_ft (bag-of-4, ~4x slower, ~0.6 dB better
+#                    drums SDR). Default is htdemucs (single model).
+#
 # Environment variables:
-#   TEMPLATE_ALS  override path to Ableton template (default: ./template/Empty.als)
+#   TEMPLATE_ALS     override path to Ableton template (default: ./template/Empty.als)
+#   DEMUCS_MODEL     override Demucs model (default: htdemucs)
+#   DEMUCS_DEVICE    override compute device ("mps" on Apple Silicon, else "cpu")
 
 set -euo pipefail
 
@@ -17,19 +23,38 @@ note()  { printf "    \033[2m%s\033[0m\n" "$*"; }
 step()  { printf "\n\033[1;36m==> %s\033[0m\n" "$*"; }
 warn()  { printf "    \033[33m!\033[0m %s\n" "$*"; }
 
+# Parse flags
+HIGH_QUALITY=0
+POSITIONAL=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --high-quality|-H) HIGH_QUALITY=1; shift ;;
+    -h|--help) POSITIONAL=(); break ;;
+    *) POSITIONAL+=("$1"); shift ;;
+  esac
+done
+set -- "${POSITIONAL[@]}"
+
 if [[ $# -lt 1 ]]; then
   cat <<EOF
-Usage: $0 <audio_file> [output_folder]
+Usage: $0 [--high-quality] <audio_file> [output_folder]
 
 Output goes into the input file's parent directory by default
 (pass an explicit output folder to override):
-  stems/{drums,bass,vocals,other}.wav         (Demucs htdemucs_ft)
-  drums_split/{kick,snare,toms,cymbals}.wav   (DrumSep)
-  analysis.txt                                 (key + BPM)
-  Ableton Project/<name>.als                   (Live 12, tempo + key set)
+  stems/{drums,bass,vocals,other}.wav                (Demucs)
+  drums_split/{kick,snare,toms,hihat,ride,crash}.wav (MDX23C)
+  analysis.txt                                        (key + BPM)
+  Ableton Project/<name>.als                          (Live 12, tempo + key set)
+
+Flags:
+  --high-quality  Use Demucs htdemucs_ft bag-of-4 model (~4x slower,
+                  marginally better drum SDR). Default is htdemucs single model
+                  with MPS acceleration on Apple Silicon.
 
 Env vars:
   TEMPLATE_ALS   path to Ableton template .als (default: ./template/Empty.als)
+  DEMUCS_MODEL   override Demucs model (default: htdemucs)
+  DEMUCS_DEVICE  override compute device (auto: mps on Apple Silicon, else cpu)
 EOF
   exit 1
 fi
@@ -61,6 +86,10 @@ Create one (see README):
 Or set TEMPLATE_ALS=/path/to/your.als to point elsewhere.
 EOF
   exit 1
+fi
+
+if [[ "$HIGH_QUALITY" == "1" ]]; then
+  export DEMUCS_MODEL="htdemucs_ft"
 fi
 
 step "Target output: $OUT_DIR"
