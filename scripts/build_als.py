@@ -306,6 +306,11 @@ def main():
     with gzip.open(output_path, "wb") as f:
         f.write(xml_out)
 
+    # 10. Mark the parent directory as an Ableton project root by creating
+    # `Ableton Project Info/` next to the .als. Without this, Live treats
+    # the .als as loose and prompts for a project location on open.
+    (project_dir / "Ableton Project Info").mkdir(exist_ok=True)
+
     print(f"\n==> Wrote {output_path}")
     print(f"    Open in Live 12 and verify tracks/paths.")
 
